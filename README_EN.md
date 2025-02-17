@@ -8,6 +8,10 @@
 
 This repository wraps the latest BiRefNet model as ComfyUI nodes. Compared to the previous model, the latest model offers higher and better matting accuracy.
 
+## 🔥🔥🔥 Update!!
+
+* 2025/02/17: 🚀 Multiple versions of BiRefNet models are supported, such as [BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet) 、[BiRefNet_HR](https://huggingface.co/ZhengPeng7/BiRefNet_HR) 、 [BiRefNet-portrait](https://huggingface.co/ZhengPeng7/BiRefNet-portrait) .
+
 ## Installation 
 
 #### Method  1:

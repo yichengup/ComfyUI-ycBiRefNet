@@ -9,6 +9,11 @@
 
 本仓库将BiRefNet最新模型封装为ComfyUI节点来使用，相较于旧模型，最新模型的抠图精度更高更好。<br>
 
+
+## 🔥🔥🔥 更新!!
+
+* 2025年02月17日: 🚀 支持多个版本BiRefNet模型，比如 [BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet) 、[BiRefNet_HR](https://huggingface.co/ZhengPeng7/BiRefNet_HR) 、 [BiRefNet-portrait](https://huggingface.co/ZhengPeng7/BiRefNet-portrait) 。
+
 ## 安装 
 
 #### 方法1:
