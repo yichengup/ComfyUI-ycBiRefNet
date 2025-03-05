@@ -5,14 +5,14 @@
     {
       "id": 2,
       "type": "LoadImage",
-      "pos": {
-        "0": 561,
-        "1": 254
-      },
-      "size": {
-        "0": 315,
-        "1": 314
-      },
+      "pos": [
+        561,
+        254
+      ],
+      "size": [
+        315,
+        314
+      ],
       "flags": {},
       "order": 0,
       "mode": 0,
@@ -20,19 +20,19 @@
       "outputs": [
         {
           "name": "IMAGE",
+          "label": "图像",
           "type": "IMAGE",
+          "shape": 3,
           "links": [
             1
-          ],
-          "shape": 3,
-          "label": "图像"
+          ]
         },
         {
           "name": "MASK",
+          "label": "遮罩",
           "type": "MASK",
-          "links": null,
           "shape": 3,
-          "label": "遮罩"
+          "links": null
         }
       ],
       "properties": {
@@ -46,13 +46,13 @@
     {
       "id": 3,
       "type": "PreviewImage",
-      "pos": {
-        "0": 1312,
-        "1": 140
-      },
+      "pos": [
+        1312,
+        140
+      ],
       "size": [
-        410.6826949448018,
-        214.56675819839558
+        410.6827087402344,
+        246
       ],
       "flags": {},
       "order": 2,
@@ -60,118 +60,27 @@
       "inputs": [
         {
           "name": "images",
+          "label": "图像",
           "type": "IMAGE",
-          "link": 2,
-          "label": "图像"
+          "link": 2
         }
       ],
       "outputs": [],
       "properties": {
         "Node name for S&R": "PreviewImage"
-      }
-    },
-    {
-      "id": 4,
-      "type": "MaskToImage",
-      "pos": {
-        "0": 933,
-        "1": 473
       },
-      "size": {
-        "0": 210,
-        "1": 26
-      },
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "mask",
-          "type": "MASK",
-          "link": 3,
-          "label": "遮罩"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            4
-          ],
-          "slot_index": 0,
-          "shape": 3,
-          "label": "图像"
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "MaskToImage"
-      }
-    },
-    {
-      "id": 1,
-      "type": "BiRefNet_Hugo",
-      "pos": {
-        "0": 921,
-        "1": 256
-      },
-      "size": [
-        315.4826217026143,
-        143.56669716323933
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 1,
-          "slot_index": 0,
-          "label": "图像"
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            2
-          ],
-          "slot_index": 0,
-          "shape": 3,
-          "label": "图像"
-        },
-        {
-          "name": "mask",
-          "type": "MASK",
-          "links": [
-            3
-          ],
-          "slot_index": 1,
-          "shape": 3,
-          "label": "遮罩"
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "BiRefNet_Hugo"
-      },
-      "widgets_values": [
-        false,
-        "transparency",
-        "auto"
-      ]
+      "widgets_values": []
     },
     {
       "id": 5,
       "type": "PreviewImage",
-      "pos": {
-        "0": 1316,
-        "1": 425
-      },
+      "pos": [
+        1316,
+        425
+      ],
       "size": [
-        430.8826461166768,
-        261.3667765089424
+        430.8826599121094,
+        261.3667907714844
       ],
       "flags": {},
       "order": 4,
@@ -179,15 +88,110 @@
       "inputs": [
         {
           "name": "images",
+          "label": "图像",
           "type": "IMAGE",
-          "link": 4,
-          "label": "图像"
+          "link": 4
         }
       ],
       "outputs": [],
       "properties": {
         "Node name for S&R": "PreviewImage"
-      }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "MaskToImage",
+      "pos": [
+        925,
+        500
+      ],
+      "size": [
+        210,
+        26
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "label": "遮罩",
+          "type": "MASK",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "label": "图像",
+          "type": "IMAGE",
+          "shape": 3,
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MaskToImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 1,
+      "type": "BiRefNet_Hugo",
+      "pos": [
+        921,
+        256
+      ],
+      "size": [
+        350,
+        175
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "label": "图像",
+          "type": "IMAGE",
+          "link": 1,
+          "slot_index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "label": "图像",
+          "type": "IMAGE",
+          "shape": 3,
+          "links": [
+            2
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "mask",
+          "label": "遮罩",
+          "type": "MASK",
+          "shape": 3,
+          "links": [
+            3
+          ],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BiRefNet_Hugo"
+      },
+      "widgets_values": [
+        "ZhengPeng7/BiRefNet",
+        false,
+        "transparency",
+        "auto"
+      ]
     }
   ],
   "links": [
@@ -228,12 +232,13 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 1,
+      "scale": 1.1671841070450009,
       "offset": [
-        -172.4824996323017,
-        67.43331809554974
+        -422.7922693194354,
+        -81.46496131912286
       ]
-    }
+    },
+    "ue_links": []
   },
   "version": 0.4
 }
