@@ -237,21 +237,21 @@ class BiRefNet_Hugo:
     RETURN_NAMES = ("image", "mask",)
     FUNCTION = "background_remove"
     CATEGORY = "🔥BiRefNet"
-  
+    
     def background_remove(self, 
-                          image, 
-                          model,
-                          load_local_model,
-                          device, 
-                          background_color_name,
-                          max_resolution=768,
-                          enable_memory_efficient=True,
-                          auto_resolution=True,
+                            image, 
+                            model,
+                            load_local_model,
+                            device, 
+                            background_color_name,
+                            max_resolution=768,
+                            enable_memory_efficient=True,
+                            auto_resolution=True,
                           *args, **kwargs
-                          ):
+                            ):
         processed_images = []
         processed_masks = []
-       
+        
         device = get_device_by_name(device)
         
         # 显示当前显存状态
@@ -404,36 +404,11 @@ class BiRefNet_Hugo:
             raise e
 
 
-# 添加清理函数节点
-class BiRefNet_ClearCache:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "trigger": ("BOOLEAN", {"default": True}),
-            }
-        }
-
-    RETURN_TYPES = ("BOOLEAN",)
-    RETURN_NAMES = ("success",)
-    FUNCTION = "clear_cache"
-    CATEGORY = "🔥BiRefNet"
-    
-    def clear_cache(self, trigger):
-        """手动清理BiRefNet模型缓存"""
-        if trigger:
-            clear_model_cache()
-            print("\033[92mBiRefNet模型缓存已清理\033[0m")
-        return (True,)
-
-
 NODE_CLASS_MAPPINGS = {
     "BiRefNet_Hugo": BiRefNet_Hugo,
-    "BiRefNet_ClearCache": BiRefNet_ClearCache
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
 NODE_DISPLAY_NAME_MAPPINGS = {
     "BiRefNet_Hugo": "🔥BiRefNet",
-    "BiRefNet_ClearCache": "🔥BiRefNet清理缓存"
 }
