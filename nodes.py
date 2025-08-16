@@ -8,6 +8,7 @@ import comfy.model_management as mm
 import os
 import gc
 import weakref
+import math
 
 torch.set_float32_matmul_precision(["high", "highest"][0])
 
@@ -28,6 +29,48 @@ model_path = os.path.join(current_path, "ComfyUI"+os.sep+"models"+os.sep+"BiRefN
 _model_cache = {}
 _device_cache = {}
 
+def get_available_memory(device):
+    """获取可用显存"""
+    if device.startswith('cuda'):
+        try:
+            current_memory = torch.cuda.memory_allocated() / (1024**3)  # GB
+            total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            available_memory = total_memory - current_memory
+            return available_memory
+        except:
+            return 4.0  # 默认4GB
+    return 16.0  # CPU或其他设备默认大内存
+
+def calculate_optimal_resolution(image_size, device, target_memory_gb=2.0):
+    """根据可用显存计算最优分辨率"""
+    w, h = image_size
+    available_memory = get_available_memory(device)
+    
+    # 如果可用显存充足，使用较高分辨率
+    if available_memory > 6.0:
+        max_res = 1024
+    elif available_memory > 4.0:
+        max_res = 768
+    elif available_memory > 2.0:
+        max_res = 512
+    else:
+        max_res = 384  # 极端情况下的最小分辨率
+    
+    # 确保不超过原图尺寸太多
+    original_max = max(w, h)
+    if original_max < max_res:
+        max_res = min(max_res, original_max + 128)  # 适当放大但不过度
+    
+    return max_res
+
+def create_dynamic_transform(target_size):
+    """创建动态的图像变换"""
+    return transforms.Compose([
+        transforms.Resize(target_size),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ])
+
 def get_cached_model(model_name, local_model_path, load_local_model, device):
     """获取缓存的模型，避免重复加载"""
     cache_key = f"{model_name}_{local_model_path}_{load_local_model}"
@@ -44,13 +87,18 @@ def get_cached_model(model_name, local_model_path, load_local_model, device):
             _device_cache[cache_key] = device
             return model
     
+    # 加载新模型前，检查显存并清理
+    if device.startswith('cuda'):
+        available_mem = get_available_memory(device)
+        print(f"\033[93m可用显存: {available_mem:.1f}GB\033[0m")
+        
+        if available_mem < 3.0:  # 如果可用显存不足3GB
+            torch.cuda.empty_cache()
+            gc.collect()
+            print("\033[93m显存不足，已执行清理\033[0m")
+    
     # 加载新模型
     print(f"\033[93m正在加载BiRefNet模型到设备: {device}\033[0m")
-    
-    # 在加载新模型前，确保有足够显存
-    if device.startswith('cuda'):
-        torch.cuda.empty_cache()
-        gc.collect()
     
     if load_local_model:
         model = AutoModelForImageSegmentation.from_pretrained(
@@ -88,33 +136,58 @@ def tensor2pil(image):
 def pil2tensor(image):
     return torch.from_numpy(np.array(image).astype(np.float32) / 255.0).unsqueeze(0)
 
-def resize_image(image, max_size=1024):
-    """智能resize，避免过大的张量"""
+def resize_image_smart(image, max_size=1024, device="cuda"):
+    """超级智能resize，根据显存动态调整"""
     image = image.convert('RGB')
     w, h = image.size
     
-    # 如果图片已经很小，不需要resize到1024
-    if max(w, h) <= max_size:
-        # 保持原始尺寸，但确保是偶数
-        w = w if w % 2 == 0 else w + 1
-        h = h if h % 2 == 0 else h + 1
+    # 根据显存情况动态调整最大分辨率
+    optimal_max_size = calculate_optimal_resolution((w, h), device)
+    final_max_size = min(max_size, optimal_max_size)
+    
+    print(f"\033[96m原始分辨率: {w}x{h}, 目标最大分辨率: {final_max_size}\033[0m")
+    
+    # 如果图片已经很小，不需要resize
+    if max(w, h) <= final_max_size:
+        # 保持原始尺寸，但确保是32的倍数（对模型更友好）
+        w = ((w + 31) // 32) * 32
+        h = ((h + 31) // 32) * 32
         model_input_size = (w, h)
     else:
-        # 等比缩放到max_size
+        # 等比缩放到final_max_size
         if w > h:
-            new_w = max_size
-            new_h = int(h * max_size / w)
+            new_w = final_max_size
+            new_h = int(h * final_max_size / w)
         else:
-            new_h = max_size
-            new_w = int(w * max_size / h)
+            new_h = final_max_size
+            new_w = int(w * final_max_size / h)
         
-        # 确保尺寸是偶数
-        new_w = new_w if new_w % 2 == 0 else new_w + 1
-        new_h = new_h if new_h % 2 == 0 else new_h + 1
+        # 确保尺寸是32的倍数
+        new_w = ((new_w + 31) // 32) * 32
+        new_h = ((new_h + 31) // 32) * 32
         model_input_size = (new_w, new_h)
     
     image = image.resize(model_input_size, Image.BILINEAR)
+    print(f"\033[96m调整后分辨率: {model_input_size[0]}x{model_input_size[1]}\033[0m")
     return image
+
+def safe_model_inference(model, input_tensor, device):
+    """安全的模型推理，包含多级降级策略"""
+    try:
+        # 第一次尝试：正常推理
+        with torch.no_grad():
+            result = model(input_tensor)[-1].sigmoid()
+            return result.cpu()
+    except torch.cuda.OutOfMemoryError as e:
+        print(f"\033[91m显存不足，尝试清理后重试...\033[0m")
+        
+        # 清理显存
+        del input_tensor
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+        # 重新创建输入张量，但使用更小的分辨率
+        raise e  # 重新抛出异常，让上层处理
 
 colors = ["transparency", "green", "white", "red", "yellow", "blue", "black", "pink", "purple", "brown", "violet", "wheat", "whitesmoke", "yellowgreen", "turquoise", "tomato", "thistle", "teal", "tan", "steelblue", "springgreen", "snow", "slategrey", "slateblue", "skyblue", "orange"]
 
@@ -151,8 +224,9 @@ class BiRefNet_Hugo:
                 "load_local_model": ("BOOLEAN", {"default": False}),
                 "background_color_name": (colors,{"default": "transparency"}), 
                 "device": (["auto", "cuda", "cpu", "mps", "xpu", "meta"],{"default": "auto"}),
-                "max_resolution": ("INT", {"default": 1024, "min": 512, "max": 2048, "step": 64}),
+                "max_resolution": ("INT", {"default": 768, "min": 384, "max": 1024, "step": 64}),
                 "enable_memory_efficient": ("BOOLEAN", {"default": True}),
+                "auto_resolution": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "local_model_path": ("STRING", {"default":model_path}),
@@ -170,8 +244,9 @@ class BiRefNet_Hugo:
                           load_local_model,
                           device, 
                           background_color_name,
-                          max_resolution=1024,
+                          max_resolution=768,
                           enable_memory_efficient=True,
+                          auto_resolution=True,
                           *args, **kwargs
                           ):
         processed_images = []
@@ -179,28 +254,59 @@ class BiRefNet_Hugo:
        
         device = get_device_by_name(device)
         
+        # 显示当前显存状态
+        if device.startswith('cuda'):
+            available_mem = get_available_memory(device)
+            print(f"\033[96m当前可用显存: {available_mem:.1f}GB\033[0m")
+        
         try:
             # 获取缓存的模型
             local_model_path = kwargs.get("local_model_path", model_path)
             birefnet = get_cached_model(model, local_model_path, load_local_model, device)
             
-            # 如果启用内存效率模式，分批处理
-            batch_size = 1 if enable_memory_efficient else len(image)
-            
-            for i in range(0, len(image), batch_size):
-                batch_images = image[i:i+batch_size]
+            # 强制内存效率模式进行单张处理
+            for idx, img_tensor in enumerate(image):
+                print(f"\033[96m正在处理第 {idx+1}/{len(image)} 张图片\033[0m")
                 
-                for img_tensor in batch_images:
+                retry_count = 0
+                max_retries = 3
+                current_max_res = max_resolution
+                
+                while retry_count < max_retries:
                     try:
                         orig_image = tensor2pil(img_tensor)
                         w, h = orig_image.size
                         
-                        # 智能resize
-                        resized_image = resize_image(orig_image, max_resolution)
-                        im_tensor = transform_image(resized_image).unsqueeze(0)
+                        # 智能resize - 根据显存自动调整分辨率
+                        if auto_resolution:
+                            resized_image = resize_image_smart(orig_image, current_max_res, device)
+                        else:
+                            # 手动resize
+                            if max(w, h) > current_max_res:
+                                if w > h:
+                                    new_w = current_max_res
+                                    new_h = int(h * current_max_res / w)
+                                else:
+                                    new_h = current_max_res
+                                    new_w = int(w * current_max_res / h)
+                                # 确保是32的倍数
+                                new_w = ((new_w + 31) // 32) * 32
+                                new_h = ((new_h + 31) // 32) * 32
+                                resized_image = orig_image.resize((new_w, new_h), Image.BILINEAR)
+                            else:
+                                resized_image = orig_image
+                        
+                        # 创建动态transform
+                        dynamic_transform = create_dynamic_transform(resized_image.size)
+                        im_tensor = dynamic_transform(resized_image).unsqueeze(0)
                         im_tensor = im_tensor.to(device)
                         
-                        # 推理
+                        # 推理前检查显存
+                        if device.startswith('cuda'):
+                            torch.cuda.empty_cache()
+                        
+                        # 安全推理
+                        print(f"\033[96m开始推理，分辨率: {resized_image.size}\033[0m")
                         with torch.no_grad():
                             result = birefnet(im_tensor)[-1].sigmoid()
                             
@@ -212,11 +318,13 @@ class BiRefNet_Hugo:
                             if device.startswith('cuda'):
                                 torch.cuda.empty_cache()
                         
+                        print(f"\033[92m推理成功!\033[0m")
+                        
                         # 后处理
                         result = torch.squeeze(F.interpolate(result, size=(h, w), mode='bilinear', align_corners=False))
                         ma = torch.max(result)
                         mi = torch.min(result)
-                        result = (result - mi) / (ma - mi + 1e-8)  # 添加小值避免除零
+                        result = (result - mi) / (ma - mi + 1e-8)
                         
                         im_array = (result * 255).data.numpy().astype(np.uint8)
                         pil_im = Image.fromarray(np.squeeze(im_array))
@@ -241,6 +349,34 @@ class BiRefNet_Hugo:
                         # 清理中间变量
                         del result, im_array, pil_im, new_im
                         
+                        # 成功处理，跳出重试循环
+                        break
+                        
+                    except torch.cuda.OutOfMemoryError as e:
+                        retry_count += 1
+                        print(f"\033[91m显存不足 (尝试 {retry_count}/{max_retries})，降低分辨率重试...\033[0m")
+                        
+                        # 清理显存
+                        if 'im_tensor' in locals():
+                            del im_tensor
+                        if 'result' in locals():
+                            del result
+                        torch.cuda.empty_cache()
+                        gc.collect()
+                        
+                        # 降低分辨率
+                        current_max_res = max(384, current_max_res - 128)
+                        print(f"\033[93m降低分辨率到: {current_max_res}\033[0m")
+                        
+                        if retry_count >= max_retries:
+                            print(f"\033[91m重试次数已达上限，跳过此图片\033[0m")
+                            # 创建一个空白的结果
+                            orig_image = tensor2pil(img_tensor)
+                            empty_mask = Image.new('L', orig_image.size, 0)
+                            processed_images.append(pil2tensor(orig_image))
+                            processed_masks.append(pil2tensor(empty_mask))
+                            break
+                    
                     except Exception as e:
                         print(f"\033[91m处理图片时出错: {str(e)}\033[0m")
                         # 在出错时也要清理显存
@@ -248,14 +384,15 @@ class BiRefNet_Hugo:
                             torch.cuda.empty_cache()
                         raise e
                 
-                # 批处理间清理
-                if enable_memory_efficient and device.startswith('cuda'):
+                # 每张图片处理后清理
+                if device.startswith('cuda'):
                     torch.cuda.empty_cache()
                     gc.collect()
 
             new_ims = torch.cat(processed_images, dim=0)
             new_masks = torch.cat(processed_masks, dim=0)
 
+            print(f"\033[92m所有图片处理完成!\033[0m")
             return new_ims, new_masks
             
         except Exception as e:
